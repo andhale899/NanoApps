@@ -192,9 +192,7 @@ typedef struct {
     uint8_t spacing;     /* 0 tight, 1 normal, 2 loose */
     uint8_t margin;      /* 0 narrow, 1 normal, 2 wide */
     uint8_t hidebar;     /* the toolbar hides itself while you read */
-    uint8_t wake;        /* keep the screen on while a book is open */
     uint8_t resume;      /* reopen the last book at start */
-    uint8_t brightness;  /* 0 = leave the iPod's own setting alone */
 } settings_t;
 
 static settings_t s_set;
@@ -217,16 +215,14 @@ static void load_cfg(void)
     uint8_t b[16];
     uint32_t n = hb_fs_read(CFG_PATH, b, sizeof b);
     s_set.font = 0; s_set.theme = 2; s_set.spacing = 1; s_set.margin = 1;
-    s_set.hidebar = 1; s_set.wake = 0; s_set.resume = 1; s_set.brightness = 0;
+    s_set.hidebar = 1; s_set.resume = 1;
     if (n >= 10 && b[0] == 'R' && b[1] == '2') {
         s_set.font = b[2] <= 2 ? b[2] : 0;
         s_set.theme = b[3] <= 2 ? b[3] : 2;
         s_set.spacing = b[4] <= 2 ? b[4] : 1;
         s_set.margin = b[5] <= 2 ? b[5] : 1;
         s_set.hidebar = b[6] ? 1 : 0;
-        s_set.wake = b[7] ? 1 : 0;
         s_set.resume = b[8] ? 1 : 0;
-        s_set.brightness = b[9] <= 100 ? b[9] : 0;
     } else if (n >= 2) {                             /* the first version stored two characters */
         s_set.font = (b[0] >= '0' && b[0] <= '2') ? (uint8_t)(b[0] - '0') : 0;
         s_set.theme = (b[1] == '1') ? 1 : 0;
@@ -237,7 +233,7 @@ static void load_cfg(void)
 static void save_cfg(void)
 {
     uint8_t b[10] = { 'R', '2', s_set.font, s_set.theme, s_set.spacing, s_set.margin,
-                      s_set.hidebar, s_set.wake, s_set.resume, s_set.brightness };
+                      s_set.hidebar, 0 /* unused */, s_set.resume, 0 /* unused */ };
     hb_fs_write(CFG_PATH, b, sizeof b);
 }
 
@@ -1217,7 +1213,6 @@ static void do_open(void)
     lv_obj_remove_flag(s_rd_view, LV_OBJ_FLAG_HIDDEN);
     apply_theme();
     toolbar_show();
-    hb_wake_lock(s_set.wake != 0);
     render_page();
     busy_hide();
 }
@@ -1278,7 +1273,6 @@ static void on_back(lv_event_t *e)
 {
     (void)e;
     save_position();
-    hb_wake_lock(false);
     book_free();
     s_open_name[0] = 0;
     hb_fs_remove(LAST_PATH);                    /* leaving a book on purpose: next launch shows the library */
@@ -1463,11 +1457,11 @@ static void on_menu_row(lv_event_t *e)
 
 #define READER_VERSION "2.2"
 
-enum { SEG_FONT, SEG_THEME, SEG_SPACE, SEG_MARGIN, SEG_BAR, SEG_WAKE, SEG_RESUME, SEG_COUNT };
+enum { SEG_FONT, SEG_THEME, SEG_SPACE, SEG_MARGIN, SEG_BAR, SEG_RESUME, SEG_COUNT };
 
 static lv_obj_t *s_set_view, *s_set_title, *s_set_close, *s_set_close_l, *s_set_scroll;
 static lv_obj_t *s_seg[SEG_COUNT][3], *s_seg_l[SEG_COUNT][3], *s_seg_cap[SEG_COUNT];
-static lv_obj_t *s_bright_cap, *s_bright_sl, *s_about_lbl;
+static lv_obj_t *s_about_lbl;
 static uint8_t   s_seg_n[SEG_COUNT];
 
 static int seg_value(int id)
@@ -1478,7 +1472,6 @@ static int seg_value(int id)
     case SEG_SPACE:  return s_set.spacing;
     case SEG_MARGIN: return s_set.margin;
     case SEG_BAR:    return s_set.hidebar ? 0 : 1;
-    case SEG_WAKE:   return s_set.wake ? 0 : 1;
     default:         return s_set.resume ? 0 : 1;
     }
 }
@@ -1503,7 +1496,6 @@ static void settings_theme(void)
     lv_obj_set_style_bg_color(s_set_close, lv_color_hex(col_btn()), 0);
     lv_obj_set_style_text_color(s_set_close_l, lv_color_hex(col_fg()), 0);
     for (int id = 0; id < SEG_COUNT; id++) lv_obj_set_style_text_color(s_seg_cap[id], lv_color_hex(col_dim()), 0);
-    lv_obj_set_style_text_color(s_bright_cap, lv_color_hex(col_dim()), 0);
     lv_obj_set_style_text_color(s_about_lbl, lv_color_hex(col_fg()), 0);
     seg_refresh();
 }
@@ -1518,7 +1510,6 @@ static void settings_change(int id, int v)
     case SEG_SPACE:  if (s_set.spacing != v) { s_set.spacing = (uint8_t)v; relayout = 1; } break;
     case SEG_MARGIN: if (s_set.margin != v)  { s_set.margin = (uint8_t)v;  relayout = 1; } break;
     case SEG_BAR:    s_set.hidebar = (v == 0); if (!s_set.hidebar && s_text) toolbar_show(); break;
-    case SEG_WAKE:   s_set.wake = (v == 0); if (s_text) hb_wake_lock(s_set.wake != 0); break;
     default:         s_set.resume = (v == 0); break;
     }
     settings_derive();
@@ -1541,17 +1532,6 @@ static void on_seg(lv_event_t *e)
 {
     int code = (int)(uintptr_t)lv_event_get_user_data(e);
     settings_change(code >> 4, code & 15);
-}
-
-static void on_bright_changed(lv_event_t *e)
-{
-    hb_brightness_set_percent((int)lv_slider_get_value(lv_event_get_target(e)));
-}
-
-static void on_bright_released(lv_event_t *e)
-{
-    s_set.brightness = (uint8_t)lv_slider_get_value(lv_event_get_target(e));
-    save_cfg();
 }
 
 static void about_refresh(void)
@@ -1589,7 +1569,6 @@ static void settings_open(lv_event_t *e)
     (void)e;
     settings_derive();
     settings_theme();
-    lv_slider_set_value(s_bright_sl, s_set.brightness ? s_set.brightness : 60, LV_ANIM_OFF);
     about_refresh();
     lv_obj_scroll_to_y(s_set_scroll, 0, LV_ANIM_OFF);
     lv_obj_remove_flag(s_set_view, LV_OBJ_FLAG_HIDDEN);
@@ -1902,17 +1881,7 @@ static void build_settings(void)
     set_row(SEG_SPACE,  y, "Line spacing",            3, "Tight", "Normal", "Loose");        y += 58;
     set_row(SEG_MARGIN, y, "Margins",                 3, "Narrow", "Normal", "Wide");        y += 58;
     set_row(SEG_BAR,    y, "Toolbar while reading",   2, "Auto-hide", "Always shown", NULL); y += 58;
-    set_row(SEG_WAKE,   y, "Keep screen on",          2, "Yes", "No", NULL);                 y += 58;
     set_row(SEG_RESUME, y, "Open last book at start", 2, "Yes", "No", NULL);                 y += 58;
-    s_bright_cap = mk_label(s_set_scroll, "Brightness", &lv_font_montserrat_14, col_dim());
-    lv_obj_set_pos(s_bright_cap, 12, y);
-    s_bright_sl = lv_slider_create(s_set_scroll);
-    lv_obj_set_size(s_bright_sl, 190, 12);
-    lv_obj_set_pos(s_bright_sl, 24, y + 30);
-    lv_slider_set_range(s_bright_sl, 5, 100);
-    lv_obj_add_event_cb(s_bright_sl, on_bright_changed, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(s_bright_sl, on_bright_released, LV_EVENT_RELEASED, NULL);
-    y += 58;
     s_about_lbl = mk_label(s_set_scroll, "", &lv_font_montserrat_14, col_fg());
     lv_label_set_long_mode(s_about_lbl, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_width(s_about_lbl, 216);
@@ -1961,7 +1930,6 @@ HB_APP_ENTRY(payload_entry)
     build_menu();
     build_settings();
     build_busy();
-    if (s_set.brightness) hb_brightness_set_percent(s_set.brightness);
     lib_alloc();
     show_library();
 

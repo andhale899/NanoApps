@@ -12,7 +12,7 @@ It grew out of the Books app and reads EPUB, FB2, HTML, Markdown and plain text,
 - **Reading:** tap the left third for the previous page and the rest for the next. Reopening the app
   returns to the book and page you left. Bookmarks, a chapter list and a position slider are in the menu.
 - **Settings** (gear button): font size, day / night / auto page colour, line spacing, margins,
-  toolbar auto-hide, keep screen on, brightness, reopen last book. The same screen has an **About** page
+  toolbar auto-hide, reopen last book. The same screen has an **About** page
   with book details, free memory and battery.
 
 ## Install
