@@ -30,6 +30,7 @@ NanoApps ships with a broad collection of apps and games: productivity and refer
 ![Productivity & Reference apps on iPod nano](screenshots/NanoApps_Productivity.png)
 
 - **[Books](apps/books/books.c)**: a plain-text book reader with paging and bookmarks.
+- **[Reader](apps/reader/reader.c)**: an ereader for EPUB, FB2, HTML, Markdown, and text, with pictures, covers, and settings.
 - **[Calculator](apps/calculator/calculator.c)**: a touch calculator with decimal support.
 - **[Calendar](apps/calendar/calendar.c)**: day, week, month, and year views with events.
 - **[Contacts](apps/contacts/contacts.c)**: a full contacts list with detail views.
